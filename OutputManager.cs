@@ -22,63 +22,147 @@ using System.ComponentModel;
 
 namespace teolib
 {
-	public class OutputManager : Component, IDisposable
+	/// <summary>
+	/// Manages the output of Teolib
+	/// </summary>
+	public sealed class OutputManager : IDisposable
 	{
+		// variables
 		private TextLayerCollection collection;
 		private TextWriter output;
 		private int margin;
+		private int width = -1;
+		private int height = -1;
 
-		public OutputManager (TextWriter output, int margin)
+		private const int defaultHeight = 30;
+		private const int defaultWidth = 101;
+
+		internal OutputManager (TextWriter output, int margin)
 		{
 			this.output = output;
 			collection = new TextLayerCollection ();
 			this.margin = margin;
+			this.height = margin;
+			this.width = Console.BufferWidth;
 			Refresh ();
 		}
 
-		public OutputManager (TextWriter output) : this(output, Console.BufferHeight) { }
+		/// <summary>
+		/// Adds the layer.
+		/// </summary>
+		/// <param name="tl">Text layer.</param>
+		public void AddLayer(TextLayer tl) {
+			collection.Add (tl);
+		}
 
-		public OutputManager() : this(Console.Out) {}
+		/// <summary>
+		/// Creates a layer and adds it to the output manager
+		/// </summary>
+		/// <returns>The layer, to be modified</returns>
+		/// <param name="width">Width.</param>
+		/// <param name="height">Height.</param>
+		/// <param name="xyView">If set to <c>true</c> xy view.</param>
+		public TextLayer MakeLayer(int width, int height, bool xyView) {
+			if (this.width != -1 && this.height != -1)
+				throw new ArgumentException ("Use the version with no parameters to add to already existing layers.", "width");
 
-		public TextLayer MergedLayer { get { return this.collection.MergeLayers(); } }
+			return MakeLayerInternal (width, height, xyView);
+		}
 
-		protected override void Dispose (bool disposing)
+		/// <summary>
+		/// Creates a layer and adds it to the output manager
+		/// </summary>
+		/// <returns>The layer.</returns>
+		/// <param name="xyView">If set to <c>true</c> xy view.</param>
+		public TextLayer MakeLayer(bool xyView) {
+			return MakeLayerInternal (width, height, xyView);
+		}
+
+		/// <summary>
+		/// Creates a layer and adds it to the output manager
+		/// </summary>
+		/// <returns>The layer.</returns>
+		public TextLayer MakeLayer() {
+			return MakeLayer (true);
+		}
+
+		private TextLayer MakeLayerInternal(int width, int height, bool xyView) {
+			TextLayer layer = new TextLayer (width, height, xyView);
+			this.width = width;
+			this.height = height;
+			this.margin = height;
+			collection.Add (layer);
+			//this.Add (layer);
+			return layer;
+		}
+
+		internal OutputManager (TextWriter output) : this(output, Console.BufferHeight) { }
+
+		internal OutputManager() : this(Console.Out) {}
+
+		/// <summary>
+		/// Gets the merged layer.
+		/// </summary>
+		/// <value>The merged layer.</value>
+		public TextLayer MergedLayer { get { 
+
+				TextLayer layer = this.collection.MergeLayers();
+				if (layer == null) {
+					layer = Teolib.GetEmptyLayer (width, height);
+					layer.XYView = false;
+				}
+				return layer;
+			} }
+
+		/// <summary>
+		/// Gets the width.
+		/// </summary>
+		/// <value>The width.</value>
+		public int Width { get { return this.width; } }
+		/// <summary>
+		/// Gets the height.
+		/// </summary>
+		/// <value>The height.</value>
+		public int Height { get { return this.height; } }
+
+		private void Dispose (bool disposing)
 		{
-			base.Dispose (disposing);
-			if (disposing)
+			if (disposing && output != Console.Out)
 				output.Dispose ();
 		}
 
+		public void Dispose () {
+			this.Dispose (true);
+		}
+
+		~OutputManager() { this.Dispose(false); }
+
+		/// <summary>
+		/// Gets or sets the margin.
+		/// </summary>
+		/// <value>The margin.</value>
 		public int Margin {
 			get { return margin; }
 			set { margin = value; }
 		}
 
+		/// <summary>
+		/// Gets the layers.
+		/// </summary>
+		/// <value>The layers.</value>
 		public TextLayerCollection Layers {
 			get { return collection; }
 		}
 
+		/// <summary>
+		/// Refreshes the output, reprinting everything
+		/// </summary>
 		public void Refresh() {
 			for (int i = 0; i < margin; i++)
-				Console.WriteLine ();
+				output.WriteLine ();
 
-			// we need a row-by-row view, not an xy view. let's compile that
-			char[][] mapping = MergedLayer.Mapping;
-			char[][] flippedMapping = new char[mapping.Length][];
-			for (int j = 0; j < mapping.Length; j++)
-				flippedMapping [0] = new char[mapping [0].Length];
-			
-			for (int k = 0; k < mapping.Length; k++) {
-				for (int l = mapping [0].Length - 1; l >= 0; l--) {
-					int x = k;
-					int y = mapping [0].Length - 1;
-					y -= l;
-					flippedMapping [x] [y] = mapping [k] [l];
-				}
-			}
-
-			foreach (char[] row in flippedMapping) {
-				Console.WriteLine (new String (row));
+			foreach (char[] row in MergedLayer.Data) {
+				output.WriteLine (new String (row));
 			}
 		}
 	}
